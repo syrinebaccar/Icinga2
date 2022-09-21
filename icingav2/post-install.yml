@@ -1,0 +1,62 @@
+-
+  name: Post Install nrpe-https-PagerD
+  hosts: icinga
+  become: yes
+  tasks:
+    - name: Update sources.list for libssl
+      lineinfile:
+        path: /etc/apt/sources.list
+        line: 'deb http://security.ubuntu.com/ubuntu xenial-security main'
+        create: yes
+
+    - name: Update packages
+      shell: apt update
+
+    - name: Install NRPE and libssl packages
+      apt:
+        name: [ 'nagios-nrpe-server', 'nagios-nrpe-plugin', 'libssl1.0.0' ]
+        state: present
+
+    - name: Copy NRPE files to servers
+      copy:
+        src: ./{{ item }}
+        dest: /etc/nagios/
+      with_items:
+        - nrpe.cfg
+        - nrpe_local.cfg
+
+    - name: Restart Nagios NRPE server
+      service:
+         name: nagios-nrpe-server
+         state: restarted
+    - name: Add PagerDuty apt key (Debian).
+      apt_key:
+        url: https://packages.pagerduty.com/GPG-KEY-pagerduty
+        state: present
+
+    - name: Add the PagerDuty repository to your system
+      command: "{{ item }}"
+      with_items:
+        - sh -c 'echo "deb https://packages.pagerduty.com/pdagent deb/" >/etc/apt/sources.list.d/pdagent.list'
+
+    - name: Install PagerDuty Packages
+      apt:
+        update_cache: yes
+        name: [ 'pdagent', 'pdagent-integrations', 'libwww-perl', 'libcrypt-ssleay-perl' ]
+        state: present
+    - name: Restart Nagios NRPE server
+      service:
+         name: pdagent
+         state: restarted
+
+    - name: Download the PagerD configuration template and the PL script
+      command: "{{ item }}"
+      with_items:
+         - wget -O /usr/local/bin/pagerduty_icinga.pl https://raw.github.com/PagerDuty/pagerduty-icinga-pl/master/pagerduty_icinga.pl
+         - chmod 755 /usr/local/bin/pagerduty_icinga.pl
+         - wget -O /etc/icinga2/conf.d/pagerduty-icinga2.conf https://raw.githubusercontent.com/PagerDuty/pdagent-integrations/master/conf.d/pagerduty-icinga2.conf
+    - name: Restart Icinga2
+      service:
+         name: icinga2
+         state: restarted
+

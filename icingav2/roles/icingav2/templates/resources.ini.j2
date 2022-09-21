@@ -1,0 +1,31 @@
+[Icingaweb2_AD_Auth]
+type        = "ldap"
+hostname    = "ldaps.wlt.vistaprint.net"
+port        = "636"
+root_dn     = "DC=vistaprint,DC=net"
+bind_dn     = "CN=atf-monitor,OU=_Service Accounts,OU=Office,OU=Corporate,DC=vistaprint,DC=net"
+bind_pw     = "SL2NkQw)N4X5"
+encryption  = "ldaps"
+charset     = "latin1"
+
+[icingaweb_db]
+type = "db"
+db = "mysql"
+host = "localhost"
+port = ""
+dbname = "icingaweb2"
+username = "{{ username }}"
+password = "{{ mysql_root_password }}"
+charset = "latin1"
+use_ssl = "0"
+
+[icinga_ido]
+type = "db"
+db = "mysql"
+host = "{{ ansible_host }}"
+port = ""
+dbname = "icinga2"
+username = "{{ username }}"
+password = "{{ mysql_root_password }}"
+charset = "latin1"
+use_ssl = "0"

@@ -1,0 +1,49 @@
+---
+- hosts: icinga
+  become: yes
+  #vars:
+  # - integration_key: "4c351a696b1b4308c02765ba6b0bc57c"
+  # - user_name: "bhiitops"
+  # - myhosts:
+  #    - hooost4
+  #    - hooost5
+  tasks:
+
+  - name: Create PagerDuty User with Integration Key
+    blockinfile:
+        path: "/etc/icinga2/conf.d/pagerduty-icinga2.conf"
+        block: |
+          object User "{{ user_name }}" {
+              pager = "{{ integration_key }}"
+              groups = [ "krypton" ]
+              display_name = "{{ user_name }} PagerDuty Notification User"
+              states = [ OK, Critical, Up, Down ]
+              types = [ Problem, Acknowledgement, Recovery ]
+          }
+        marker: "# {mark} ANSIBLE MANAGED BLOCK {{ user_name }}"
+        state: present
+
+  - name: Add Pager duty Notifications
+    blockinfile:
+       path: "/etc/icinga2/conf.d/hosts.d/{{ item }}.conf"
+       block: |2
+                    vars.notification[ "pagerduty" ] = {
+                       users = [ "{{ user_name }}" ]
+                      }
+       insertbefore: "vars.notification*"
+       marker: ""
+    with_items: "{{ myhosts }}"
+
+
+  - name: Checking Icinga2 daemon
+    command: icinga2  daemon -C
+    register: agent_status
+    failed_when: "'critical' in agent_status.stdout"
+    changed_when: False
+
+  - name: reload icinga2
+    service:
+        name: icinga2
+        state: reloaded
+        enabled: yes
+

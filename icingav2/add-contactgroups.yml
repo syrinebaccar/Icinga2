@@ -1,0 +1,28 @@
+---
+-
+   hosts: icinga
+   become: yes
+   #vars:
+     #contactgroup: "cntctgrp"
+   tasks:
+     - name: create new contactgroup
+       become: yes
+       copy:
+          dest: "/etc/icinga2/conf.d/contactgroups.d/{{ contactgroup }}.conf"
+          content: |
+            object UserGroup "{{ contactgroup }}" {
+                display_name = "{{ contactgroup }}"
+                }
+#        marker: "# {mark} ANSIBLE MANAGED BLOCK {{ contactgroup }}"
+      
+     - name: Checking Icinga2 daemon
+       command: icinga2  daemon -C
+       register: agent_status
+       failed_when: "'critical' in agent_status.stdout"
+       changed_when: False
+
+     - name: reload icinga2
+       service:
+            name: icinga2
+            state: reloaded
+            enabled: yes

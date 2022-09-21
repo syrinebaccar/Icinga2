@@ -1,0 +1,13 @@
+[icingaweb2]
+backend = "db"
+resource = "icingaweb_db"
+
+[ldap-group-auth]
+backend = "msldap"
+resource = "Icingaweb2_AD_Auth"
+user_class = "member"
+user_name_attribute = "cn"
+group_class = "groupofnames"
+group_name_attribute = "cn"
+group_filter = "cn=ATF - Monitoring*"
+user_backend = "auth_vistaprint"

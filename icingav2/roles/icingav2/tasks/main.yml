@@ -1,0 +1,5 @@
+- include: dependencies.yaml
+- include: install_icinga.yaml
+- include: mysql.yaml
+- include: icingaweb2.yaml
+- include: post_install.yaml

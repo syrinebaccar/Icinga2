@@ -1,0 +1,85 @@
+- name: Enable SSL and HTTPS redirect
+  hosts: icinga
+  vars:
+    directory: /etc/apache2/certs/
+  tasks:
+    - name: Create directory
+      become: yes
+      file:
+        path: "{{ directory }}"
+        state: directory
+    - name: private key
+      become: yes
+      openssl_privatekey:
+        path: '{{ directory }}{{ ansible_host }}.key'
+        size: 2048
+    - name: Generate OpenSSL Certificate Signing Request
+      become: yes
+      openssl_csr:
+        path: '{{ directory }}{{ ansible_host }}.csr'
+        privatekey_path: '{{ directory }}{{ ansible_host }}.key'
+        country_name: US
+        state_or_province_name: Massachusetts
+        locality_name: Waltham
+        organization_name: Vistaprint
+        organizational_unit_name: Legends
+        common_name: "{{ ansible_host }}"
+    - name: certificate
+      become: yes
+      openssl_certificate:
+        provider: selfsigned
+        path: '{{ directory }}{{ ansible_host }}.crt'
+        privatekey_path: '{{ directory }}{{ ansible_host }}.key'
+        csr_path: '{{ directory }}{{ ansible_host }}.csr'
+    - name: Configure apache to use ssl
+      become: yes
+      template:
+        src: templates/default-ssl.conf.j2
+        dest: /etc/apache2/sites-available/default-ssl.conf
+    - name: Enable the new configuration file using the a2ensite tool.
+      become: yes
+      command: a2ensite default-ssl.conf
+    - name: Test your config for errors
+      become: yes
+      command: apache2ctl configtest
+      register: conf_test
+    - debug:
+        var: conf_test
+    - name: Reload apache2
+      become: yes
+      service:
+        name: apache2
+        state: reloaded
+    - name: Redirecting HTTP to HTTPS
+      become: yes
+      blockinfile:
+        path: "/etc/apache2/sites-available/default-ssl.conf"
+        block: |
+          <VirtualHost _default_:80>
+          Redirect / https://{{ ansible_host }}/
+          </VirtualHost>
+        backup: yes
+
+    - name: Enable SSL Module
+      become: yes
+      command: a2enmod ssl
+
+    - name: Disable default HTTP VHost
+      become: yes
+      command: a2dissite 000-default
+
+    - name: Enable the new configuration file using the a2ensite tool.
+      become: yes
+      command: a2ensite default-ssl.conf
+    - name: Test your config for errors
+      become: yes
+      command: apache2ctl configtest
+      register: conf_test
+    - debug:
+        var: conf_test
+    - name: Reload apache2
+      become: yes
+      service:
+        name: apache2
+        state: restarted
+

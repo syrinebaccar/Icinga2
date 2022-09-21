@@ -1,0 +1,18 @@
+- name: Update allowed hosts in nrpe_local.cfg
+  hosts: all
+  tasks:
+    - name: comment the old allowed hosts line
+      become: yes
+      replace:
+        path: /etc/nagios/nrpe_local.cfg
+            # The String to Search
+        regexp: '^allowed_hosts='
+            # The String to Replace
+        replace: '#allowed_hosts='
+    - name: Adding the new allowed_hosts
+      become: yes
+      blockinfile:
+        path: "/tmp/nrpe_local.cfg"
+        #regexp: '^allowed '
+        insertafter: '^#allowed '
+        line: allowed_hosts=11111

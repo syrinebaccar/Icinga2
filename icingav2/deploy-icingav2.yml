@@ -1,0 +1,6 @@
+- name: Install icinga2/icingaweb2
+  hosts: icinga
+  become: yes
+  tasks:
+  roles:
+   - role: icingav2

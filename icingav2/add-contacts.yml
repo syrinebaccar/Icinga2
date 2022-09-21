@@ -1,0 +1,40 @@
+---
+-
+   hosts: icinga
+   become: yes
+   #vars:
+     #contactgroup: "\"cntctgrp\""
+     #contactgroup: ""
+     #contacts:
+       #- { username: 'syrine', email: 'aaaesshuu@jhhuihihi' }
+       #- { username: 'yassine', email: '112255@56565' }
+       #- { username: 'fs.file-max', email: '65536' }
+
+   tasks:
+     - name: create new contact
+       become: yes
+       copy:
+          dest: "/etc/icinga2/conf.d/contacts.d/{{ item.username }}.conf"
+          content: |
+           object User "{{ item.username }}" {
+              import "generic-user"
+              display_name = "{{ item.username }}"
+              groups = [ {{ contactgroup }} ]
+              email = "{{ item.email }}"
+              }
+       with_items:
+         - "{{ contacts }}"
+
+#        marker: "# {mark} ANSIBLE MANAGED BLOCK {{ contactgroup }}"
+
+     - name: Checking Icinga2 daemon
+       command: icinga2  daemon -C
+       register: agent_status
+       failed_when: "'critical' in agent_status.stdout"
+       changed_when: False
+
+     - name: reload icinga2
+       service:
+            name: icinga2
+            state: reloaded
+            enabled: yes

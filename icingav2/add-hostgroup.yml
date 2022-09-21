@@ -1,0 +1,29 @@
+---
+-
+   hosts: icinga
+   become: yes
+   #vars:
+     #hostgroup: "all_hosts3"
+   tasks:
+     - name: create new hostgroup
+       become: yes
+       blockinfile:
+        path: "/etc/icinga2/conf.d/groups.conf"
+        block: |
+          object HostGroup "{{ hostgroup }}" {
+                  display_name = "{{ hostgroup }}"
+                 }
+        marker: "# {mark} ANSIBLE MANAGED BLOCK {{ hostgroup }}"
+
+
+     - name: Checking Icinga2 daemon
+       command: icinga2  daemon -C
+       register: agent_status
+       failed_when: "'critical' in agent_status.stdout"
+       changed_when: False
+
+     - name: reload icinga2
+       service:
+            name: icinga2
+            state: reloaded
+            enabled: yes

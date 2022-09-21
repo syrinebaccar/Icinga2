@@ -1,0 +1,159 @@
+#Automating the Installation of Icinga Web 2
+- name: import database schema
+  become: yes
+  mysql_db:
+    name: icingaweb2
+    state: import
+    target: /usr/share/icingaweb2/etc/schema/mysql.schema.sql
+    login_unix_socket: /var/run/mysqld/mysqld.sock
+
+- name: enable features
+  become: yes
+  command: "{{ item }}"
+  with_items:
+    - icinga2 feature enable ido-mysql
+    - icinga2 feature enable api
+
+- name: enable modules
+  become: yes
+  command: "{{ item }}"
+  with_items:
+    - icingacli module enable monitoring
+    - icingacli module enable doc
+    - icingacli module enable migrate
+
+
+- name: download file for gui setup
+  become: yes
+  get_url:
+    url: https://vistaprint.box.com/shared/static/rg8aazuzq12v51a9oa2v8lsnkr3xdwmk.gz
+    dest: /tmp/icinga.tar.gz
+
+- name: Extract the file
+  become: yes
+  unarchive:
+    src: /tmp/icinga.tar.gz
+    dest: /tmp/
+    remote_src: yes
+
+- name: replace icinga2 folders
+  become: yes
+  copy:
+    src: /tmp/icinga2_etc/
+    dest: /etc/icinga2/
+    remote_src: yes
+
+- name: replace icingaweb2 folders
+  become: yes
+  copy:
+    src: /tmp/icingaweb2_etc/
+    dest: /etc/icingaweb2/
+    remote_src: yes
+
+- name: update the ido-mysql.cnf with database credentials
+  become: yes
+  template:
+        src: templates/ido-mysql.conf.j2
+        dest: /etc/icinga2/features-available/ido-mysql.conf
+
+- name: adding new API user object
+  become: yes
+  template:
+    src: templates/api-users.conf.j2
+    dest: /etc/icinga2/conf.d/api-users.conf
+
+- name: Editing commandtransports.ini file
+  become: yes
+  template:
+    src: templates/commandtransports.ini.j2
+    dest: /etc/icingaweb2/modules/monitoring/commandtransports.ini
+
+- name: Editing roles.ini file
+  become: yes
+  template:
+    src: templates/roles.ini.j2
+    dest: /etc/icingaweb2/roles.ini
+
+- name: Editing resources.ini file
+  become: yes
+  template:
+    src: templates/resources.ini.j2
+    dest: /etc/icingaweb2/resources.ini
+
+- name: Editing authentication.ini file
+  become: yes
+  template:
+    src: templates/authentication.ini.j2
+    dest: /etc/icingaweb2/authentication.ini
+
+- name: Editing groups.ini file
+  become: yes
+  template:
+    src: templates/groups.ini.j2
+    dest: /etc/icingaweb2/groups.ini
+
+- name: import mysql databases #Import file.sql similar to mysql -u <username> -p <password> < hostname.sql
+  become: yes
+  mysql_db:
+    login_user: lgd_admin
+    login_password: "{{ mysql_root_password }}"
+    state: import
+    name: all
+    target: /tmp/dump_icinga.sql
+
+- name: setup icinga2 Rest API #setup API
+  become: yes
+  command: "icinga2 api setup"
+
+- name: install LDAP Utils
+  become: yes
+  apt:
+        name: ['ldap-utils']
+
+- name: Enabling Ldap_Authnz #setup API
+  become: yes
+  command: "a2enmod authnz_ldap"
+
+- name: Editing ldap.conf file
+  become: yes
+  template:
+    src: templates/ldap.conf.j2
+    dest: /etc/ldap/ldap.conf
+
+
+- name: change privs for conf.d folder
+  become: yes
+  file:
+    path: /etc/icinga2/conf.d/
+    owner: nagios
+    mode: 755
+
+- name: change privs for features-available folder
+  become: yes
+  file:
+    path: /etc/icinga2/features-available
+    owner: nagios
+    mode: 755
+
+- name: change file permissions
+  become: yes
+  file:
+    path: /etc/icinga2/features-available/
+    mode: "u=rwX,g=rX,o=rX"
+    recurse: yes
+
+- name: Delete .my.cnf
+  file:
+    state: absent
+    path: /root/.my.cnf
+    
+- name: change file permissions 2
+  become: yes
+  file:
+    path: /etc/icinga2/conf.d/
+    mode: "u=rwX,g=rX,o=rX"
+    recurse: yes
+  notify:
+    - restart apache2
+    - restart mysql
+    - restart icinga2

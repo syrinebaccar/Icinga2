@@ -1,0 +1,11 @@
+- name: Editing roles.ini file
+  become: yes
+  template:
+    src: templates/roles.ini.j2
+    dest: /etc/icingaweb2/roles.ini
+
+- name: Editing resources.ini file
+  become: yes
+  template:
+    src: templates/resources.ini.J2
+    dest: /etc/icingaweb2/resources.ini

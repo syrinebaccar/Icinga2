@@ -1,0 +1,103 @@
+#5. Instal and Configure MySQL Database Server
+- name: install mysql
+  become: yes
+  apt:
+    name: ['mysql-server', 'mysql-client', 'python3-mysqldb']
+
+- name: enable mysql
+  systemd:
+    name: mysql
+    state: started
+    enabled: yes
+
+- name: comment bind address line
+  become: yes
+  replace:
+    path: /etc/mysql/mysql.conf.d/mysqld.cnf
+        # The String to Search
+    regexp: '^bind-address'
+        # The String to Replace
+    replace: '#bind-address           = 127.0.0.1'
+
+- name: Copy /.my.cnf file
+  become: yes
+  template:
+    src: templates/mysql-user.cnf.j2
+    dest: /root/.my.cnf
+
+- name: "Set database password"
+  become: yes
+  command: mysql -u root --execute="ALTER USER 'root'@'localhost' IDENTIFIED WITH mysql_native_password BY '{{ mysql_root_password }}';"
+- name: Flush Privileges
+  become: yes
+  command: mysql --user=root --password={{ mysql_root_password }} --execute="flush privileges";
+
+- name: create LGD user
+  become: yes
+  mysql_user:
+        name: lgd_admin
+        password: '{{ mysql_root_password }}'
+        login_user: 'root'
+        login_password: '{{ mysql_root_password }}'
+        host: '%'
+        state: present
+        priv: '*.*:ALL,GRANT'
+        login_unix_socket: /var/run/mysqld/mysqld.sock
+
+
+
+#6. install and enable the IDO MySQL module
+- name: install icinga2-ido-mysql
+  become: true
+  apt:
+      name: ['icinga2-ido-mysql']
+
+#create a db for it
+- name: Create an IDO Database for Icinga2
+  become: yes
+  mysql_db:
+        name: icinga2
+        state: present
+        login_unix_socket: /var/run/mysqld/mysqld.sock
+  register: icinga_ido_db
+
+#create a user for the database and change grants
+- name: Create Icinga2 IDO Database User and configure Grants
+  become: yes
+  mysql_user:
+    name: lgd_admin
+    password: "{{ mysql_root_password }}"
+    state: present
+    priv: '*.*:ALL,GRANT'
+    login_unix_socket: /var/run/mysqld/mysqld.sock
+
+#import the IDO schema on icinga web database
+- name: Import the IDO Schema on Icinga Web Database (only once)
+  become: yes
+  mysql_db:
+        name: icinga2 #make this a var too
+        state: import
+        target: /usr/share/icinga2-ido-mysql/schema/mysql.sql #make this a variable
+        login_unix_socket: /var/run/mysqld/mysqld.sock
+  when: icinga_ido_db.changed == true
+
+# edit the file with your database credentials
+- name: update the ido-mysql.cnf with database credentials
+  become: yes
+  template:
+        src: templates/ido-mysql.conf.j2
+        dest: /etc/icinga2/features-available/ido-mysql.conf
+
+
+#enable ido-mysql feature configuration
+- name: Enable Icinga2 Ido Mysql Feature
+  become: yes
+  command: "icinga2 feature enable ido-mysql"
+
+- name: restart mysql
+  become: yes
+  systemd:
+        name: mysql
+        state: restarted
+        daemon_reload: yes
+        enabled: yes

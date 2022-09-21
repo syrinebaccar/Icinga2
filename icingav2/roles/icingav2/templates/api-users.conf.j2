@@ -1,0 +1,19 @@
+/**
+ * The ApiUser objects are used for authentication against the API.
+ */
+object ApiUser "root" {
+  password = "d10ab7d32dfb56c6"
+  // client_cn = ""
+
+  permissions = [ "*" ]
+}
+
+/**
+ * The ApiUser objects are used for authentication against the API.
+ */
+object ApiUser "lgd_admin" {
+  password = "{{ mysql_root_password }}"
+  // client_cn = ""
+
+  permissions = [ "status/query", "actions/*", "objects/modify/*", "objects/query/*" ]
+  }

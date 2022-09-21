@@ -1,0 +1,10 @@
+  # 3./4. install icinga2 and inable it / install check plugins
+- name: install icinga2
+  become: yes
+  apt:
+        name: ['icinga2', 'monitoring-plugins']
+
+- name: enable icinga2
+  systemd:
+        name: icinga2
+        enabled: yes

@@ -1,0 +1,28 @@
+---
+-
+   hosts: icinga
+   become: yes
+   vars:
+     myhosts:
+  #     - hooost1
+  #     - hooost2
+  #     - hooost3
+   tasks:
+      - name: Delete Icinga2 hosts
+        file:
+            path: "/etc/icinga2/conf.d/hosts.d/{{ item }}.conf"
+            state: absent
+        with_items: "{{ myhosts }}"
+
+      - name: Checking Icinga2 daemon
+        command: icinga2  daemon -C
+        register: agent_status
+        failed_when: "'critical' in agent_status.stdout"
+        changed_when: False
+
+      - name: reload icinga2
+        service:
+            name: icinga2
+            state: reloaded
+            enabled: yes
+

@@ -1,0 +1,21 @@
+---
+# handlers file for Icinga2-
+
+- name: restart icinga2
+  become: yes
+  service:
+    name: icinga2
+    state: restarted
+
+- name: restart mysql
+  become: yes
+  service:
+    name: mysql
+    state: restarted
+
+
+- name: restart apache2
+  become: yes
+  service:
+    name: apache2
+    state: restarted

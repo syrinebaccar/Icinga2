@@ -1,0 +1,108 @@
+---
+-
+   hosts: icinga
+   become: yes
+   #vars:
+     #hostgroup: "\"all_hosts2\",\"all_hosts3\""
+     #pagerduty_user: "syrine"
+     #contactgroup: "cntctgrp"
+     #myhosts:
+      # - hooost4
+      # - hooost5
+      # - hooost6
+   tasks:
+      - name: Delete current Backup hosts.d folder
+        file:
+          path: "/opt/icinga2/bkp/hosts.d"
+          state: absent
+      - name: Backup current hosts.d folder
+        copy:
+          src: "/etc/icinga2/conf.d/hosts.d"
+          dest: "/opt/icinga2/bkp/"
+          owner: nagios
+          group: nagios
+          directory_mode: yes
+          remote_src: yes
+      - name: new host file mail notification
+        copy:
+            dest: "/etc/icinga2/conf.d/hosts.d/{{ item }}.conf"
+            content: |
+                object Host "{{ item }}" {
+                  import "generic-host"
+                  address = "{{ item }}"
+                  check_command = "hostalive"
+                  display_name = "{{ item }}"
+                  max_check_attempts = 3
+                  vars.notification[ "mail" ] = {
+                     groups = [ "{{ contactgroup }}" ]
+                     }
+                  groups = [ "all_hosts","{{ hostgroup }}" ]
+                  {{ enabled_vars | indent(width=2 ) }}
+                }
+
+        with_items: "{{ myhosts }}"
+        when: contactgroup is defined and pagerduty_user is not defined
+
+      - name: new host file pagerduty notification
+        copy:
+            dest: "/etc/icinga2/conf.d/hosts.d/{{ item }}.conf"
+            content: |
+                object Host "{{ item }}" {
+                  import "generic-host"
+                  address = "{{ item }}"
+                  check_command = "hostalive"
+                  display_name = "{{ item }}"
+                  vars.notification[ "pagerduty" ] = {
+                     users = [ "{{ pagerduty_user }}" ]
+                     }
+                  groups = [ "all_hosts",{{ hostgroup }} ]
+                  {{ enabled_vars | indent(width=2 ) }}
+                }
+
+        with_items: "{{ myhosts }}"
+        when: pagerduty_user is defined and contactgroup is not defined
+
+      - name: new host file pagerduty and mail notification
+        copy:
+            dest: "/etc/icinga2/conf.d/hosts.d/{{ item }}.conf"
+            content: |
+                object Host "{{ item }}" {
+                  import "generic-host"
+                  address = "{{ item }}"
+                  check_command = "hostalive"
+                  display_name = "{{ item }}"
+                  vars.notification[ "pagerduty" ] = {
+                     users = [ "{{ pagerduty_user }}" ]
+                     }
+                  vars.notification[ "mail" ] = {
+                     groups = [ "{{ contactgroup }}" ]
+                     }
+                  groups = [ "all_hosts",{{ hostgroup }} ]
+                  {{ enabled_vars | indent(width=2 ) }}
+                }
+
+        with_items: "{{ myhosts }}"
+        when: pagerduty_user is defined and contactgroup is defined
+
+      - name: Checking Icinga2 daemon
+        command: icinga2  daemon -C
+        register: agent_status
+        failed_when: "'critical' in agent_status.stdout"
+        changed_when: False
+        ignore_errors: yes
+
+      - name: reload icinga2
+        service:
+            name: icinga2
+            state: reloaded
+            enabled: yes
+        when: "'critical' not in agent_status.stdout"
+
+      - name: Roll back
+        shell: |
+            rm -rf /etc/icinga2/conf.d/hosts.d
+            cp -r /opt/icinga2/bkp/hosts.d /etc/icinga2/conf.d/
+            chown -R nagios:nagios /etc/icinga2/conf.d/hosts.d
+        args: 
+           warn: false
+        when: "'critical' in agent_status.stdout"

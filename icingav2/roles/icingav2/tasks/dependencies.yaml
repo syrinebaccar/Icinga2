@@ -1,0 +1,43 @@
+- name: install essential applications #instaling some tools/apps
+  become: true
+  apt:
+        name: ['vim', 'apt-transport-https', 'wget', 'gnupg']
+
+- name: install php7.4-gd
+  become: true
+  apt:
+        name: ['php7.4-gd']
+  notify:
+    - restart apache2
+
+- name: install pip3
+  become: yes
+  apt:
+        name: ['python3-pip','python3-dev']
+
+- name: install pymysql module
+  become: yes
+  pip:
+        name: pymysql
+        executable: pip3
+        state: present
+
+# 2. add icinga2 repository
+- name: icinga repository #add the icinga2 repository for the Ubuntu 20.04 and package key
+  become: true
+  apt_key:
+        url: https://packages.icinga.com/icinga.key
+        state: present
+
+- name: Creating a file with content #No comment jawek behi
+  become: true
+  copy:
+    dest: "/etc/apt/sources.list.d/icinga-focal.list"
+    content: |
+          deb http://packages.icinga.com/ubuntu icinga-focal main
+          deb-src http://packages.icinga.com/ubuntu icinga-focal main
+
+- name: run update command  #sudo apt update
+  become: yes
+  apt:
+    update_cache: yes

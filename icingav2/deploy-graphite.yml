@@ -1,0 +1,228 @@
+#the beginning of the playbook
+- name: graphite installation
+  hosts: graphite
+  vars: 
+    secretkey: somesecretkey
+    #graphite_ip: 10.227.21.143
+  tasks:
+    - name: Install graphite carbon/web
+      become: true
+      apt:
+        name: ['graphite-carbon', 'graphite-web']
+    - name: Enable carbon-cache on boot #change to true
+      become: yes
+      lineinfile:
+        path: /etc/default/graphite-carbon
+        # The String to Search
+        regexp: "CARBON_CACHE_ENABLED=false"
+        # The String to Replace
+        line: "CARBON_CACHE_ENABLED=true"
+        state: present
+        backup: yes
+      register: output
+    - name: Restart graphite
+      become: yes
+      systemd:
+        name: carbon-cache
+        state: restarted
+        daemon_reload: yes
+        enabled: yes
+    - name: Define secret-key
+      become: yes
+      lineinfile:
+        path: /etc/graphite/local_settings.py
+        # The String to Search
+        regexp: "#SECRET_KEY = 'UNSAFE_DEFAULT'"
+        # The String to Replace
+        line: "SECRET_KEY = '{{secretkey}}'"
+        state: present
+        backup: yes
+      register: output
+    - name: Create database for graphite
+      become: yes
+      shell: "/usr/lib/python3/dist-packages/django/bin/django-admin.py migrate --settings=graphite.settings"
+      ignore_errors: yes
+      tags:
+        - skip_task
+    - name: Fix first error
+      become: yes
+      command: "{{ item }}"
+      with_items:
+        - sed -i 's/from cgi import parse_qs/from urllib.parse import parse_qs/' /usr/lib/python3/dist-packages/graphite/render/views.py
+      tags:
+        - skip_task
+    - name: Try to create the database again
+      become: yes
+      shell: "/usr/lib/python3/dist-packages/django/bin/django-admin.py migrate --settings=graphite.settings"
+      ignore_errors: yes
+      tags:
+        - skip_task
+    - name: Fix second error
+      become: yes
+      shell: "find / -name app_settings.py 2> /dev/null"
+      tags:
+        - skip_task
+    - name: Fix third error
+      become: yes
+      command: "{{ item }}"
+      with_items:
+        - sed -i -E "s/('django.contrib.contenttypes')/\1,\n  'django.contrib.messages'/" /usr/lib/python3/dist-packages/graphite/app_settings.py
+      tags:
+        - skip_task
+    - name: And once more (database command)
+      become: yes
+      shell: "/usr/lib/python3/dist-packages/django/bin/django-admin.py migrate --settings=graphite.settings"
+      ignore_errors: yes
+      tags:
+        - skip_task
+#Assign ownership of the SQLite database file to the _graphite user
+    - name: Reassign ownership of the SQLite
+      become: yes
+      command: "{{ item }}"
+      with_items:
+        - chown _graphite:_graphite /var/lib/graphite/graphite.db
+###########Install webserver to serve Graphite############
+    - name: Install Apache2 and mod_wsgi
+      become: true
+      apt:
+        name: ['apache2', 'libapache2-mod-wsgi-py3']
+    - name: Copy the Graphite Web Apache conf template to the sites-available folder
+      become: yes
+      become_user: root
+      copy:
+        src: /usr/share/graphite-web/apache2-graphite.conf
+        dest: /etc/apache2/sites-available
+        remote_src: yes
+#Disable 000-default
+    - name: Disable the default virtual host file
+      become: yes
+      command: "{{ item }}"
+      with_items:
+        - a2dissite 000-default
+#Enable apache2-graphite.conf
+    - name: Enable the graphite virtual host file
+      become: yes
+      command: "{{ item }}"
+      with_items:
+        - a2ensite apache2-graphite
+    - name: Restart Apache2
+      become: yes
+      systemd:
+        name: apache2
+        state: restarted
+        daemon_reload: yes
+        enabled: yes
+################Grant _graphite user Ownership of Log Files#######
+    - name: Grant _graphite user Ownership of Log Files
+      become: yes
+      command: "{{ item }}"
+      with_items:
+        - chown _graphite:_graphite /var/log/graphite/info.log
+        - chown _graphite:_graphite /var/log/graphite/exception.log
+#################View Graphite Dashboard#############
+######If all goes well, you should be able to see your graphite-web dashboard########
+######at your host's IP address (or via loopback interface).#######
+#####____________Linking graphite to icinga2____________####
+- hosts: icinga
+  tasks:
+    - name: Enable graphite feature
+      become: yes
+      command: "{{ item }}"
+      with_items:
+        - icinga2 feature enable graphite
+#Create file 'graphite.conf' under /etc/icinga2/features-enabled/'
+    - name: Define Graphite object
+      become: yes
+      copy:
+        dest: "/etc/icinga2/features-enabled/graphite.conf"
+        content: |
+          /**
+           * The GraphiteWriter type writes check result metrics and
+           * performance data to a graphite tcp socket.
+           */
+           object GraphiteWriter "graphite" {
+           host = "{{ graphite_ip }}"
+           port = 2003
+           enable_send_thresholds = true
+           enable_send_metadata = true
+           }
+#installing Graphite module from repository
+    - name: Installing Graphite module from repository through script
+      become: yes
+      copy:
+        dest: "/graphite.sh"
+        content: |
+          #!/bin/bash -x
+          ICINGAWEB_MODULEPATH="/usr/share/icingaweb2/modules"
+          REPO_URL="https://github.com/icinga/icingaweb2-module-graphite"
+          TARGET_DIR="${ICINGAWEB_MODULEPATH}/graphite"
+          MODULE_VERSION="1.1.0"
+          git clone "${REPO_URL}" "${TARGET_DIR}" --branch v${MODULE_VERSION}
+    - name: Giving the file permissions and executing it
+      become: yes
+      command: "{{ item }}"
+      with_items:
+        - chmod +x /graphite.sh
+        - bash /graphite.sh
+      tags:
+        - skip_task
+#enable graphite module
+    - name: Enable graphite module
+      become: yes
+      command: "{{ item }}"
+      with_items:
+        - icingacli module enable graphite
+#restart icinga2
+    - name: Restart icinga2
+      become: yes
+      systemd:
+        name: icinga2
+        state: restarted
+        daemon_reload: yes
+        enabled: yes
+    - name: change to latin1
+      become: yes
+      lineinfile:
+        path: /etc/icingaweb2/resources.ini
+        # The String to Search
+        regexp: 'charset = ""'
+                # The String to Replace
+        line: 'charset = "latin1"'
+        state: present
+        backup: yes
+      register: output
+    - name: create /modules/graphite directory
+      become: yes
+      file:
+        path: /etc/icingaweb2/modules/graphite
+        state: directory
+    - name: Add graphite url
+      become: true
+      copy:
+        dest: "/etc/icingaweb2/modules/graphite/config.ini"
+        content: |
+            [graphite]
+            url = "http://{{ graphite_ip }} "
+            insecure = "0"
+#####back to graphite server#####
+#the beginning of the playbook
+- name: play
+  hosts: graphite
+  tasks:
+    - name: Edit storage-schemas.conf file
+      become: yes
+      copy:
+        src: storage-schemas.conf
+        dest: /etc/carbon/
+    - name: Delete content & directory
+      become: yes
+      file:
+        state: absent
+        path: /var/lib/graphite/whisper/icinga2/
+    - name: Restart graphite
+      become: yes
+      systemd:
+        name: carbon-cache
+        state: restarted
+        enabled: yes
+

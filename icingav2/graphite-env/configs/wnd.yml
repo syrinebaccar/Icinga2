@@ -1,2 +1,2 @@
-graphite_ip: 10.70.220.179 
-icinga_ip: 10.70.220.177
+graphite_ip: *.*.*.*
+icinga_ip: *.*.*.*

@@ -1,2 +1,2 @@
-icinga ansible_host=192.168.56.102 ansible_ssh_pass=yassine
-graphite ansible_host=192.168.56.103 ansible_ssh_pass=yassine
+icinga ansible_host=192.168.56.102 ansible_ssh_pass=****
+graphite ansible_host=192.168.56.103 ansible_ssh_pass=****
